@@ -1,0 +1,106 @@
+name: Classroom50 Autograder Evaluation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# --- Configuração de Variáveis Globais com Fallbacks para Dev Local ---
+env:
+  DOCKER_IMAGE_VERSION: ${{ vars.DOCKER_IMAGE_VERSION || 'v2.0' }}
+  GABARITO_TOKEN: ${{ secrets.GABARITO_TOKEN || secrets.LOCAL_DEV_GABARITO_TOKEN }}
+  GABARITOS_REPO: ${{ vars.GABARITOS_REPO || 'ufla-classroom50/gabaritos-privados' }}
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout do código do Aluno
+        uses: actions/checkout@v4
+
+      - name: Ler ID do Exercício (.classroom/config.json)
+        id: get_ex_id
+        run: |
+          if [ ! -f .classroom/config.json ]; then
+            echo "ERRO: Arquivo .classroom/config.json não foi encontrado!"
+            exit 1
+          fi
+          EX_ID=$(jq -r '.exercise_id' .classroom/config.json)
+          echo "EXERCISE_ID=$EX_ID" >> $GITHUB_ENV
+          echo "EXERCISE_ID=$EX_ID" >> $GITHUB_OUTPUT
+          echo "ID do exercício detectado: $EX_ID"
+
+      - name: Checkout do Gabarito no Cofre Privado
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GABARITOS_REPO }}
+          token: ${{ env.GABARITO_TOKEN }}
+          ref: 'main'
+          path: 'reference_temp'
+
+      - name: Criar pasta de saída local
+        run: mkdir -p output
+
+      - name: Executar Autograder em Docker (Genérico)
+        run: |
+          docker run --rm \
+            -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            -v "${{ github.workspace }}/src:/app/submission" \
+            -v "${{ github.workspace }}/reference_temp/${{ steps.get_ex_id.outputs.EXERCISE_ID }}:/app/reference" \
+            -v "${{ github.workspace }}/output:/app/output" \
+            markinsilva/classroom50-ai-autograder:${{ env.DOCKER_IMAGE_VERSION }}
+
+      - name: Postar Feedback no Pull Request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = './output/results.json';
+
+            if (!fs.existsSync(path)) {
+              core.setFailed('Arquivo output/results.json não foi encontrado!');
+              return;
+            }
+
+            const results = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+            let codigoSugestao = '';
+            if (results.sugestao_correcao) {
+              const codigoFormatado = results.sugestao_correcao.replace(/\\n/g, '\n');
+              codigoSugestao = `### 🛠️ Sugestão de Código:\n\`\`\`java\n${codigoFormatado}\n\`\`\``;
+            }
+
+            const body = `## 🤖 Feedback da Avaliação Automática
+
+            **Resultado:** \`${results.avaliacao ?? 'N/A'}\`
+
+            ### 📝 Justificativa:
+            ${results.justificativa ?? 'Sem justificativa.'}
+
+            ### 💡 Dica de Correção:
+            ${results.dica_correcao ?? 'Sem dicas.'}
+
+            ${codigoSugestao}
+
+            ---
+            *Avaliado automaticamente pelo Gemini via LangGraph.*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Salvar Artefato do Resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: autograder-results
+          path: output/results.json

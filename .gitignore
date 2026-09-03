@@ -1,0 +1,18 @@
+# Arquivos de ambiente e segredos locais
+.env
+.env.local
+.env.*.local
+
+# Manter apenas o template rastreado
+!.env.template
+
+# Arquivos temporários de teste e saídas
+output/
+reference_temp/
+*.class
+
+# IDEs e Sistema Operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
