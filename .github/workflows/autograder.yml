@@ -47,12 +47,12 @@ jobs:
       - name: Criar pasta de saída local
         run: mkdir -p output
 
-      - name: Executar Autograder em Docker (Genérico)
+      - name: Executar Autograder em Docker (100% Genérico)
         run: |
           docker run --rm \
             -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
             -v "${{ github.workspace }}/src:/app/submission" \
-            -v "${{ github.workspace }}/reference_temp/${{ steps.get_ex_id.outputs.EXERCISE_ID }}:/app/reference" \
+            -v "${{ github.workspace }}/reference_temp/${{ env.EXERCISE_ID }}:/app/reference" \
             -v "${{ github.workspace }}/output:/app/output" \
             markinsilva/classroom50-ai-autograder:${{ env.DOCKER_IMAGE_VERSION }}
 

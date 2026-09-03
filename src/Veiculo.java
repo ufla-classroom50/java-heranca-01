@@ -1,3 +1,14 @@
 public class Veiculo {
-    // Implemente a classe Veiculo e a classe Carro aqui
+    private String marca; // Erro: Deveria ser protected conforme o enunciado
+
+    public void acelerar() {
+        System.out.println("Acelerando...");
+    }
+}
+
+// Erro: Esqueceu de colocar "extends Veiculo"
+class Carro { 
+    public void acelerar() {
+        System.out.println("Carro acelerando");
+    }
 }
